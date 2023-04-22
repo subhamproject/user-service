@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/gin-gonic/gin"
 )
 
 type User struct {
@@ -20,7 +21,10 @@ func main() {
 	r := gin.Default()
 	r.GET("/user", GetUserHandler)
 	r.GET("/user/order", GetUserOrderHandler)
-	err := r.Run(":9091")
+
+	serverPort := GetEnvParam("SERVICE_PORT", "8082")
+
+	err := r.Run(":" + serverPort)
 	if err != nil {
 		log.Fatalf("impossible to start server: %s", err)
 	}
@@ -28,10 +32,10 @@ func main() {
 
 func GetUserHandler(c *gin.Context) {
 	id := c.Query("id")
-	fmt.Println(fmt.Sprintf("received request to get user by id %s", id))
+	fmt.Printf("received request to get user by id %s\n", id)
 	user, err := GetUserByID(id)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("unable to get user by id %s , error - %v", id, err))
+		fmt.Printf("unable to get user by id %s , error - %v\n", id, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable retrieve user"})
 		return
 	}
@@ -40,10 +44,10 @@ func GetUserHandler(c *gin.Context) {
 
 func GetUserOrderHandler(c *gin.Context) {
 	id := c.Query("id")
-	fmt.Println(fmt.Sprintf("received request to get user %s, orders ", id))
+	fmt.Printf("received request to get user %s, orders \n", id)
 	userOrder, err := GetUserOrder(id)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("unable to get user %s, orders. error - %v", id, err))
+		fmt.Printf("unable to get user %s, orders. error - %v \n", id, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("unable retrieve user's order data, %v", err)})
 		return
 	}
@@ -60,7 +64,7 @@ func GetUserByID(id string) (User, error) {
 
 func GetUserOrder(id string) (User, error) {
 	host := GetEnvParam("ORDER_SVC_HOST", "localhost")
-	port := GetEnvParam("ORDER_SVC_PORT", "9092")
+	port := GetEnvParam("ORDER_SVC_PORT", "8081")
 	orderSvcUrl := fmt.Sprintf("http://%s:%s/order?id=111", host, port)
 	resp, err := http.Get(orderSvcUrl)
 	if err != nil {
@@ -69,11 +73,14 @@ func GetUserOrder(id string) (User, error) {
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return User{}, fmt.Errorf("error while reading user order response- %v", err)
+	}
 	var order interface{}
 	err = json.Unmarshal(body, &order)
 	if err != nil {
 		fmt.Println("error while parsing user orders ", err)
-		return User{}, err
+		return User{}, fmt.Errorf("error while parsing user orders- %v", err)
 	}
 	return User{
 		ID:    id,
