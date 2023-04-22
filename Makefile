@@ -56,7 +56,7 @@ server:
 	@go run main.go
 
 docker:
-	@make linux_amd64
+	@make ${platform}
 	@docker build -t ${PROJECT_NAME}:latest .
 
 .PHONY: all-sys

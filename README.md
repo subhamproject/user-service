@@ -13,5 +13,3 @@ http://localhost:8082/user/order?id=101
 | SERVICE_PORT | string | 8082 |  User Service http server port |
 | ORDER_SVC_HOST | string | localhost | Order Service hostname |
 | ORDER_SVC_PORT | string | 8081   | Order Service port number |
- 
-
