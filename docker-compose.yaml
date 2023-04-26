@@ -49,5 +49,36 @@ services:
     volumes:
       - mongodb_data_container:/data/db
 
+  user_service:
+    image: user-service:latest
+    hostname: user
+    depends_on:
+      - order_service
+    environment:
+      SERVICE_PORT: 8082
+      ORDER_SVC_HOST: order
+      ORDER_SVC_PORT: 8081
+    ports:
+      - 8082:8082
+
+  order_service:
+    image: order-service:latest
+    hostname: order
+    container_name: order
+    environment:
+      SERVICE_PORT: 8081
+    ports:
+      - 8081:8081   
+
+  system_service:
+    image: system-service:latest
+    hostname: system
+    container_name: system
+    environment:
+      SERVICE_PORT: 8083
+    ports:
+      - 8083:8083    
+
+
 volumes:
   mongodb_data_container:

@@ -1,9 +1,14 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+
+	"github.com/gin-gonic/gin"
 )
 
 type User struct {
@@ -16,7 +21,10 @@ func main() {
 	r := gin.Default()
 	r.GET("/user", GetUserHandler)
 	r.GET("/user/order", GetUserOrderHandler)
-	err := r.Run(":9091")
+
+	serverPort := GetEnvParam("SERVICE_PORT", "8082")
+
+	err := r.Run(":" + serverPort)
 	if err != nil {
 		log.Fatalf("impossible to start server: %s", err)
 	}
@@ -24,8 +32,10 @@ func main() {
 
 func GetUserHandler(c *gin.Context) {
 	id := c.Query("id")
+	fmt.Printf("received request to get user by id %s\n", id)
 	user, err := GetUserByID(id)
 	if err != nil {
+		fmt.Printf("unable to get user by id %s , error - %v\n", id, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable retrieve user"})
 		return
 	}
@@ -34,9 +44,11 @@ func GetUserHandler(c *gin.Context) {
 
 func GetUserOrderHandler(c *gin.Context) {
 	id := c.Query("id")
+	fmt.Printf("received request to get user %s, orders \n", id)
 	userOrder, err := GetUserOrder(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable retrieve user's order data"})
+		fmt.Printf("unable to get user %s, orders. error - %v \n", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("unable retrieve user's order data, %v", err)})
 		return
 	}
 	c.JSON(http.StatusOK, userOrder)
@@ -51,8 +63,36 @@ func GetUserByID(id string) (User, error) {
 }
 
 func GetUserOrder(id string) (User, error) {
+	host := GetEnvParam("ORDER_SVC_HOST", "localhost")
+	port := GetEnvParam("ORDER_SVC_PORT", "8081")
+	orderSvcUrl := fmt.Sprintf("http://%s:%s/order?id=111", host, port)
+	resp, err := http.Get(orderSvcUrl)
+	if err != nil {
+		fmt.Println("error while loading user orders ", err)
+		return User{}, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return User{}, fmt.Errorf("error while reading user order response- %v", err)
+	}
+	var order interface{}
+	err = json.Unmarshal(body, &order)
+	if err != nil {
+		fmt.Println("error while parsing user orders ", err)
+		return User{}, fmt.Errorf("error while parsing user orders- %v", err)
+	}
 	return User{
-		ID:   id,
-		Name: "Doe",
+		ID:    id,
+		Name:  "Doe",
+		Order: order,
 	}, nil
+}
+
+// GetEnvParam : return string environmental param if exists, otherwise return default
+func GetEnvParam(param string, dflt string) string {
+	if v, exists := os.LookupEnv(param); exists {
+		return v
+	}
+	return dflt
 }
