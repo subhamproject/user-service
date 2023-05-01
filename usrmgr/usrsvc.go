@@ -1,6 +1,7 @@
 package usrmgr
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -20,16 +21,22 @@ type User struct {
 }
 
 func GetUserByID(id string) (User, error) {
+
+	SendLogs(fmt.Sprintf("received request to get user by Id %s", id))
+
 	var user User
 	filter := bson.D{{"id", id}}
 	err := userCollection.FindOne(context.Background(), filter).Decode(&user)
 	if err != nil {
 		return user, err
 	}
+
 	return user, nil
 }
 
 func GetAllUsers() ([]User, error) {
+
+	SendLogs("received request to get all users")
 	var users []User
 	cursor, err := userCollection.Find(context.Background(), bson.D{{}})
 	if err != nil {
@@ -44,6 +51,9 @@ func GetAllUsers() ([]User, error) {
 }
 
 func CreateUser(usr User) (string, error) {
+
+	SendLogs(fmt.Sprintf("received request to create new user: %s", usr.Name))
+
 	id := genUserId()
 	usr.ID = id
 
@@ -53,13 +63,17 @@ func CreateUser(usr User) (string, error) {
 		return "", err
 	}
 	fmt.Println("user inserted with InsertedID: ", result.InsertedID)
+
+	CreateUserOrder(usr.ID)
+
 	return id, nil
 }
 
 func GetUserOrder(id string) (User, error) {
 	host := GetEnvParam("ORDER_SVC_HOST", "localhost")
 	port := GetEnvParam("ORDER_SVC_PORT", "8081")
-	orderSvcUrl := fmt.Sprintf("http://%s:%s/order?id=111", host, port)
+
+	orderSvcUrl := fmt.Sprintf("http://%s:%s/order?userId=%s", host, port, id)
 	resp, err := http.Get(orderSvcUrl)
 	if err != nil {
 		fmt.Println("error while loading user orders ", err)
@@ -84,6 +98,25 @@ func GetUserOrder(id string) (User, error) {
 
 	usr.Order = order
 	return usr, nil
+}
+
+func CreateUserOrder(userId string) error {
+	fmt.Printf("invoke order-service to create order for user %v\n", userId)
+
+	host := GetEnvParam("ORDER_SVC_HOST", "localhost")
+	port := GetEnvParam("ORDER_SVC_PORT", "8081")
+
+	orderSvcUrl := fmt.Sprintf("http://%s:%s/order?userId=%s", host, port, userId)
+	resp, err := http.Post(orderSvcUrl, "application/json", bytes.NewBuffer(nil))
+	if err != nil {
+		fmt.Println("failed to creare user orders ", err)
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("failed to creare user orders received response ", resp)
+		return err
+	}
+	return nil
 }
 
 // GetEnvParam : return string environmental param if exists, otherwise return default
