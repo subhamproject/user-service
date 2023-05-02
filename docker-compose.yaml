@@ -3,7 +3,17 @@ version: '3.6'
 services:
   zoo1:
     image: confluentinc/cp-zookeeper:7.3.2
+    deploy:
+        resources:
+            limits:
+              cpus: '1'
+              memory: 1G
     hostname: zoo1
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -nz 127.0.0.1 2181"]
+      interval: 5s
+      timeout: 60s
+      retries: 10
     container_name: zoo1
     ports:
       - "2181:2181"
@@ -15,13 +25,18 @@ services:
   kafka1:
     image: confluentinc/cp-kafka:7.3.2
     hostname: kafka1
+    deploy:
+        resources:
+            limits:
+              cpus: '1'
+              memory: 1G
     container_name: kafka1
     ports:
       - "9092:9092"
       - "29092:29092"
       - "9999:9999"
     environment:
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:19092,EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:9092,DOCKER://host.docker.internal:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,DOCKER:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_ZOOKEEPER_CONNECT: "zoo1:2181"
@@ -34,11 +49,23 @@ services:
       KAFKA_JMX_HOSTNAME: ${DOCKER_HOST_IP:-127.0.0.1}
       KAFKA_AUTHORIZER_CLASS_NAME: kafka.security.authorizer.AclAuthorizer
       KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "true"
+    healthcheck:
+      #test: ["CMD", "kafka-topics.sh", "--list", "--zookeeper", "zoo1:2181"]
+      test: ["CMD", "sh", "-c", "nc -nz 127.0.0.1 9092"]
+      interval: 5s
+      timeout: 60s
+      retries: 10
     depends_on:
-      - zoo1
+      zoo1:
+        condition: service_healthy
 
   mongodb_container:
     image: mongo:latest
+    deploy:
+        resources:
+            limits:
+              cpus: '1'
+              memory: 1G
     hostname: mongo
     container_name: mongo
     environment:
@@ -49,36 +76,168 @@ services:
     volumes:
       - mongodb_data_container:/data/db
 
-  user_service:
+  user:
+    build:
+      context: ./build/user
+      args:
+       GIT_BRANCH: feat-kafka
     image: user-service:latest
+    deploy:
+        resources:
+            limits:
+              cpus: '1'
+              memory: 500M
     hostname: user
+    #container_name: user
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
     depends_on:
-      - order_service
+      order:
+        condition: service_healthy
+      kafka1:
+        condition: service_healthy
+      zoo1:
+        condition: service_healthy
     environment:
       SERVICE_PORT: 8082
       ORDER_SVC_HOST: order
       ORDER_SVC_PORT: 8081
-    ports:
-      - 8082:8082
+      MONGO_HOST: mongo
+      PORT_PORT: 27017
+      MONGO_USERNAME: root
+      MONGO_PASSWORD: rootpassword
+      KAFKA_HOST: kafka1
+      KAFKA_PORT: 9092
+      KAFKA_TOPIC: demoTopic
 
-  order_service:
+  userlb:
+      image: nginx:latest
+      container_name: userlb
+      hostname: userapilb
+      volumes:
+      - ./config/user_nginx.conf:/etc/nginx/nginx.conf:ro
+      ports:
+      - "8082:80"
+      depends_on:
+        user:
+          condition: service_healthy
+
+
+  order:
+    build:
+      context: ./build/order
+      args:
+       GIT_BRANCH: feat-kafka
     image: order-service:latest
+    deploy:
+        resources:
+            limits:
+              cpus: '1'
+              memory: 500M
     hostname: order
-    container_name: order
+    #container_name: order
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
     environment:
       SERVICE_PORT: 8081
-    ports:
-      - 8081:8081   
+      MONGO_HOST: mongo
+      PORT_PORT: 27017
+      MONGO_USERNAME: root
+      MONGO_PASSWORD: rootpassword
+    depends_on:
+      kafka1:
+        condition: service_healthy
 
-  system_service:
+  orderlb:
+      image: nginx:latest
+      container_name: orderlb
+      hostname: orderlb
+      volumes:
+      - ./config/order_nginx.conf:/etc/nginx/nginx.conf:ro
+      ports:
+      - "8081:80"
+      depends_on:
+        order:
+          condition: service_healthy
+
+
+  system:
+    build:
+      context: ./build/system
+      args:
+       GIT_BRANCH: feat-kafka
     image: system-service:latest
+    deploy:
+        resources:
+            limits:
+              cpus: '1'
+              memory: 500M
     hostname: system
-    container_name: system
+    #container_name: system
     environment:
       SERVICE_PORT: 8083
-    ports:
-      - 8083:8083    
+      KAFKA_HOST: kafka1
+      KAFKA_PORT: 9092
+      KAFKA_TOPIC: demoTopic
+      KAFKA_MAX_POLL_INTERVAL_MS: 86400000
+    depends_on:
+      user:
+        condition: service_healthy
+      order:
+        condition: service_healthy
 
+  systemlb:
+      image: nginx:latest
+      container_name: systemlb
+      hostname: systemlb
+      volumes:
+      - ./config/system_nginx.conf:/etc/nginx/nginx.conf:ro
+      ports:
+      - "8083:80"
+      depends_on:
+       - system
+
+  scale:
+    build:
+      context: ./build/scale
+    image: scale:latest
+    deploy:
+        resources:
+            limits:
+              cpus: '1'
+              memory: 500M
+    hostname: scale
+    container_name: scale
+    depends_on:
+      user:
+        condition: service_healthy
+      order:
+        condition: service_healthy
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    deploy:
+        resources:
+            limits:
+              cpus: '1'
+              memory: 500M
+    container_name: cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk:/dev/disk/:ro
+    ports:
+    - '8080:8080'
 
 volumes:
   mongodb_data_container:
