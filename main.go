@@ -1,98 +1,82 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/subhamproject/user-service/usrmgr"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-type User struct {
-	ID    string      `json:"id"`
-	Name  string      `json:"name"`
-	Order interface{} `json:"order,omitempty"`
-}
-
 func main() {
+
+	var client *mongo.Client
+	var ctx context.Context
+	var cFund context.CancelFunc
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		fmt.Println("initializing connection mongo...")
+		//init mogno db
+		client, ctx, cFund, _ = usrmgr.InitMongoDB()
+	}()
+
+	wg.Wait()
+
 	r := gin.Default()
-	r.GET("/user", GetUserHandler)
-	r.GET("/user/order", GetUserOrderHandler)
 
-	serverPort := GetEnvParam("SERVICE_PORT", "8082")
+	r.POST("/user", usrmgr.CreateUserHandler)
+	r.GET("/users", usrmgr.GetAllUsersHandler)
+	r.GET("/user", usrmgr.GetUserHandler)
+	r.GET("/user/order", usrmgr.GetUserOrderHandler)
 
-	err := r.Run(":" + serverPort)
-	if err != nil {
-		log.Fatalf("impossible to start server: %s", err)
-	}
-}
+	serverPort := usrmgr.GetEnvParam("SERVICE_PORT", "8082")
 
-func GetUserHandler(c *gin.Context) {
-	id := c.Query("id")
-	fmt.Printf("received request to get user by id %s\n", id)
-	user, err := GetUserByID(id)
-	if err != nil {
-		fmt.Printf("unable to get user by id %s , error - %v\n", id, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable retrieve user"})
-		return
+	srv := &http.Server{
+		Addr:    ":" + serverPort,
+		Handler: r,
 	}
-	c.JSON(http.StatusOK, user)
-}
 
-func GetUserOrderHandler(c *gin.Context) {
-	id := c.Query("id")
-	fmt.Printf("received request to get user %s, orders \n", id)
-	userOrder, err := GetUserOrder(id)
-	if err != nil {
-		fmt.Printf("unable to get user %s, orders. error - %v \n", id, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("unable retrieve user's order data, %v", err)})
-		return
-	}
-	c.JSON(http.StatusOK, userOrder)
-}
+	// Initializing the server in a goroutine so that
+	// it won't block the graceful shutdown handling below
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
 
-func GetUserByID(id string) (User, error) {
-	// TODO : lookup in db
-	return User{
-		ID:   id,
-		Name: "Doe",
-	}, nil
-}
+	// Wait for interrupt signal to gracefully shutdown the server with
+	// a timeout of 5 seconds.
+	quit := make(chan os.Signal, 1)
+	// kill (no param) default send syscall.SIGTERM
+	// kill -2 is syscall.SIGINT
+	// kill -9 is syscall.SIGKILL but can't be catch, so don't need add it
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
 
-func GetUserOrder(id string) (User, error) {
-	host := GetEnvParam("ORDER_SVC_HOST", "localhost")
-	port := GetEnvParam("ORDER_SVC_PORT", "8081")
-	orderSvcUrl := fmt.Sprintf("http://%s:%s/order?id=111", host, port)
-	resp, err := http.Get(orderSvcUrl)
-	if err != nil {
-		fmt.Println("error while loading user orders ", err)
-		return User{}, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return User{}, fmt.Errorf("error while reading user order response- %v", err)
-	}
-	var order interface{}
-	err = json.Unmarshal(body, &order)
-	if err != nil {
-		fmt.Println("error while parsing user orders ", err)
-		return User{}, fmt.Errorf("error while parsing user orders- %v", err)
-	}
-	return User{
-		ID:    id,
-		Name:  "Doe",
-		Order: order,
-	}, nil
-}
+	//clode mongo driver
+	usrmgr.CloseMongoDB(client, ctx, cFund)
 
-// GetEnvParam : return string environmental param if exists, otherwise return default
-func GetEnvParam(param string, dflt string) string {
-	if v, exists := os.LookupEnv(param); exists {
-		return v
+	// The context is used to inform the server it has 5 seconds to finish
+	// the request it is currently handling
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown: ", err)
 	}
-	return dflt
+
+	log.Println("Server exiting")
+
 }

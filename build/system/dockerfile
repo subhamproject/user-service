@@ -1,19 +1,23 @@
 FROM golang:1.19.4-buster as builder
 
+RUN apt update && apt install git -y
+
 # Create and change to the app directory.
+ARG GIT_BRANCH
+
+RUN git clone -b ${GIT_BRANCH:-feat-kafka} https://github.com/subhamproject/system-service.git /app
+
 WORKDIR /app
 
-# Expecting to copy go.mod and if present go.sum.
-COPY go.* ./
+#Expecting to copy go.mod and if present go.sum.
 
 RUN go mod download
 
 # Copy local code to the container image.
-COPY . ./
 
 # Build the binary.
-RUN go build -v -o user-service
-EXPOSE 8082
+RUN go build -v -o system-service
+EXPOSE 8083
 
 FROM debian:buster-slim
 RUN set -x && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -21,7 +25,7 @@ RUN set -x && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -
     rm -rf /var/lib/apt/lists
 
 
-COPY --from=builder /app/user-service /app/user-service
+COPY --from=builder /app/system-service /app/system-service
 
 # Run the binary program produced by `go install`
-CMD ["/app/user-service"]
+CMD ["/app/system-service"]
