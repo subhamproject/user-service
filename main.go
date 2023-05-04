@@ -35,7 +35,7 @@ func main() {
 	wg.Wait()
 
 	r := gin.Default()
-
+	r.GET("/health", usrmgr.GetServiceHealthHandler)
 	r.POST("/user", usrmgr.CreateUserHandler)
 	r.GET("/users", usrmgr.GetAllUsersHandler)
 	r.GET("/user", usrmgr.GetUserHandler)

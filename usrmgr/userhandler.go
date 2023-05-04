@@ -59,3 +59,7 @@ func GetUserOrderHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, userOrder)
 }
+
+func GetServiceHealthHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, "I'm Healthly")
+}
