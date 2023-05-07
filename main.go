@@ -30,6 +30,9 @@ func main() {
 		fmt.Println("initializing connection mongo...")
 		//init mogno db
 		client, ctx, cFund, _ = usrmgr.InitMongoDB()
+
+		//init kafka connection
+		usrmgr.InitKafka()
 	}()
 
 	wg.Wait()
@@ -66,8 +69,10 @@ func main() {
 	<-quit
 	log.Println("Shutting down server...")
 
-	//clode mongo driver
+	//close mongo driver
 	usrmgr.CloseMongoDB(client, ctx, cFund)
+	//close kafka connection
+	usrmgr.CloseKafka()
 
 	// The context is used to inform the server it has 5 seconds to finish
 	// the request it is currently handling
