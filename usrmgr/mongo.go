@@ -3,6 +3,7 @@ package usrmgr
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -39,21 +40,30 @@ func close(client *mongo.Client, ctx context.Context,
 // context.CancelFunc will be used to cancel context and
 // resource associated with it.
 
-func connect(uri, user, pass string) (*mongo.Client, context.Context,
+func connect(uri string) (*mongo.Client, context.Context,
 	context.CancelFunc, error) {
 
 	// ctx will be used to set deadline for process, here
 	// deadline will of 30 seconds.
-	ctx, cancel := context.WithTimeout(context.Background(),
-		30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-	// "mongodb://user:password@localhost:27017".
 	credential := options.Credential{
-		Username: user,
-		Password: pass,
+		AuthMechanism: "MONGODB-X509",
 	}
-	// mongo.Connect return mongo.Client method
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri).SetAuth(credential))
+	clientOpts := options.Client().ApplyURI(uri).SetAuth(credential)
+
+	client, err := mongo.Connect(ctx, clientOpts)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err != nil {
+		fmt.Println("connect failed!")
+		log.Fatal(err)
+		return nil, ctx, cancel, err
+	}
+	fmt.Println("connect successful!")
+
 	return client, ctx, cancel, err
 }
 
@@ -67,24 +77,31 @@ func ping(client *mongo.Client, ctx context.Context) error {
 	// Ping method return error if any occurred, then
 	// the error can be handled.
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
+		fmt.Println("ping failed!")
+		log.Fatal(err)
 		return err
 	}
-	fmt.Println("connected successfully")
+	fmt.Println("ping  successful!")
 	return nil
 }
 
 func InitMongoDB() (*mongo.Client, context.Context,
 	context.CancelFunc, error) {
 
-	host := GetEnvParam("MONGO_HOST", "localhost")
-	port := GetEnvParam("MONGO_PORT", "27017")
 	user := GetEnvParam("MONGO_USERNAME", "root")
 	pass := GetEnvParam("MONGO_PASSWORD", "rootpassword")
-	mongoDbUrl := fmt.Sprintf("mongodb://%s:%s", host, port)
+	caFilePath := GetEnvParam("MONGO_CA_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongoCA.crt")
+	certificateKeyFilePath := GetEnvParam("MONGO_CLIENT_CERT_KEY", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongo-client.pem")
+
+	uri := GetEnvParam("MONGO_URL", "mongodb://%s:%s@mongo1:27011,mongo2:27011,mongo3:27011/demo?replicaSet=rs0&tlsCAFile=%s&tlsCertificateKeyFile=%s")
+
+	//DB_URL: "mongodb://test:rcxdev@rcx-mongo:27017,mongors1n1:27017,mongors2n1:27017/test?replicaSet=rs0"
+
+	uri = fmt.Sprintf(uri, user, pass, caFilePath, certificateKeyFilePath)
 
 	// Get Client, Context, CancelFunc and
 	// err from connect method.
-	client, ctx, cFund, err := connect(mongoDbUrl, user, pass)
+	client, ctx, cFund, err := connect(uri)
 	if err != nil {
 		panic(err)
 	}
