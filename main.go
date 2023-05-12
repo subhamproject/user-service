@@ -49,7 +49,8 @@ func main() {
 
 	r := gin.Default()
 
-	r.Use(otelgin.Middleware("user-service"))
+	f := func(req *http.Request) bool { return req.URL.Path != "/health" }
+	r.Use(otelgin.Middleware("user-service", otelgin.WithFilter(f)))
 
 	r.GET("/health", usrmgr.GetServiceHealthHandler)
 	r.POST("/user", usrmgr.CreateUserHandler)

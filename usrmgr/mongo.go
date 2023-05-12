@@ -117,7 +117,7 @@ func InitMongoDB() (*mongo.Client, context.Context,
 
 	//DB_URL: "mongodb://test:rcxdev@rcx-mongo:27017,mongors1n1:27017,mongors2n1:27017/test?replicaSet=rs0"
 
-	uri = fmt.Sprintf(uri, user, pass, caFilePath, certificateKeyFilePath)
+	//uri = fmt.Sprintf(uri, user, pass, caFilePath, certificateKeyFilePath)
 
 	var client *mongo.Client
 	var ctx context.Context
@@ -131,10 +131,8 @@ func InitMongoDB() (*mongo.Client, context.Context,
 		uri = fmt.Sprintf(uri, user, pass, caFilePath, certificateKeyFilePath)
 		client, ctx, cFunc, err = connect(uri)
 	}
-
 	// Get Client, Context, CancelFunc and
 	// err from connect method.
-
 	if err != nil {
 		panic(err)
 	}

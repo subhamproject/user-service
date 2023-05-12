@@ -10,7 +10,6 @@ import (
 )
 
 func CreateUserHandler(c *gin.Context) {
-
 	tracer := otel.Tracer("CreateUserHandler")
 	ctx, parentSpan := tracer.Start(c, "CreateUserHandler")
 
