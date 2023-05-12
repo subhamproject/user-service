@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -39,6 +41,23 @@ func close(client *mongo.Client, ctx context.Context,
 // context.Context will be used set deadlines for process.
 // context.CancelFunc will be used to cancel context and
 // resource associated with it.
+func connectLocal(uri, user, pass string) (*mongo.Client, context.Context,
+	context.CancelFunc, error) {
+
+	// ctx will be used to set deadline for process, here
+	// deadline will of 30 seconds.
+	ctx, cancel := context.WithTimeout(context.Background(),
+		30*time.Second)
+
+	// "mongodb://user:password@localhost:27017".
+	credential := options.Credential{
+		Username: user,
+		Password: pass,
+	}
+	// mongo.Connect return mongo.Client method
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri).SetAuth(credential))
+	return client, ctx, cancel, err
+}
 
 func connect(uri string) (*mongo.Client, context.Context,
 	context.CancelFunc, error) {
@@ -88,20 +107,34 @@ func ping(client *mongo.Client, ctx context.Context) error {
 func InitMongoDB() (*mongo.Client, context.Context,
 	context.CancelFunc, error) {
 
+	devMode := GetEnvBoolParam("DEV_MODE", true)
 	user := GetEnvParam("MONGO_USERNAME", "root")
 	pass := GetEnvParam("MONGO_PASSWORD", "rootpassword")
 	caFilePath := GetEnvParam("MONGO_CA_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongoCA.crt")
 	certificateKeyFilePath := GetEnvParam("MONGO_CLIENT_CERT_KEY", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongo-client.pem")
 
-	uri := GetEnvParam("MONGO_URL", "mongodb://%s:%s@mongo1:27011,mongo2:27011,mongo3:27011/demo?replicaSet=rs0&tlsCAFile=%s&tlsCertificateKeyFile=%s")
+	uri := GetEnvParam("MONGO_URL", "mongodb://%s:%s@mongo1:27011,mongo2:27012,mongo3:27013/demo?replicaSet=rs0&tlsCAFile=%s&tlsCertificateKeyFile=%s")
 
 	//DB_URL: "mongodb://test:rcxdev@rcx-mongo:27017,mongors1n1:27017,mongors2n1:27017/test?replicaSet=rs0"
 
 	uri = fmt.Sprintf(uri, user, pass, caFilePath, certificateKeyFilePath)
 
+	var client *mongo.Client
+	var ctx context.Context
+	var cFunc context.CancelFunc
+	var err error
+
+	if devMode {
+		uri = "mongodb://localhost:27017"
+		client, ctx, cFunc, err = connectLocal(uri, user, pass)
+	} else {
+		uri = fmt.Sprintf(uri, user, pass, caFilePath, certificateKeyFilePath)
+		client, ctx, cFunc, err = connect(uri)
+	}
+
 	// Get Client, Context, CancelFunc and
 	// err from connect method.
-	client, ctx, cFund, err := connect(uri)
+
 	if err != nil {
 		panic(err)
 	}
@@ -111,7 +144,7 @@ func InitMongoDB() (*mongo.Client, context.Context,
 
 	userCollection = client.Database("demo").Collection("users")
 
-	return client, ctx, cFund, err
+	return client, ctx, cFunc, err
 }
 
 func CloseMongoDB(client *mongo.Client, ctx context.Context, cancel context.CancelFunc) {
@@ -121,4 +154,16 @@ func CloseMongoDB(client *mongo.Client, ctx context.Context, cancel context.Canc
 	close(client, ctx, cancel)
 
 	fmt.Println("mongodb connected closed")
+}
+
+// GetEnvBoolParam : return bool environmental param if exists, otherwise return default
+func GetEnvBoolParam(param string, dflt bool) bool {
+	if v, exists := os.LookupEnv(param); exists {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return dflt
+		}
+		return b
+	}
+	return dflt
 }

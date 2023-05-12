@@ -23,6 +23,7 @@ func SendLogs(val string) {
 		Partition: int(kafka.PatternTypeAny),
 		Value:     []byte(val),
 	}
+
 	err := kafkaWriter.WriteMessages(context.TODO(), msg)
 	if err != nil {
 		log.Fatalln(err)
@@ -31,7 +32,7 @@ func SendLogs(val string) {
 	}
 }
 
-func getKafkaWriter(kafkaURL, topic string) *kafka.Writer {
+func getSslKafkaWriter(kafkaURL, topic string) *kafka.Writer {
 	clientCertFile := GetEnvParam("KAFKA_CLIENT_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/kafka.user.cert")
 	clientKeyFile := GetEnvParam("KAFKA_CLIENT_KEY", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/kafka.user.key")
 	// caCertFile := GetEnvParam("KAFKA_CA_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/kafka.user.pem")
@@ -62,16 +63,40 @@ func getKafkaWriter(kafkaURL, topic string) *kafka.Writer {
 	return w
 }
 
+func getKafkaWriter(kafkaURL, topic string) *kafka.Writer {
+	fmt.Println("initializing non ssl kafka writer")
+	servers := strings.Split(kafkaURL, ",")
+
+	w := kafka.NewWriter(kafka.WriterConfig{
+		Brokers:  servers,
+		Topic:    topic,
+		Balancer: &kafka.Hash{},
+	})
+	w.AllowAutoTopicCreation = true
+
+	// w := &kafka.Writer{
+	// 	Addr:                   kafka.TCP(kafkaURL),
+	// 	Topic:                  topic,
+	// 	AllowAutoTopicCreation: true,
+	// }
+
+	return w
+}
+
 func InitKafka() {
-	fmt.Println("initializing kafka connection.")
-	kafkaURL := GetEnvParam("KAFKA_SERVERS", "localhost:19091,localhost:29092,localhost:39093")
+	devMode := GetEnvBoolParam("DEV_MODE", true)
+	fmt.Println("initializing kafka connection. devmode: ", devMode)
+	kafkaURL := GetEnvParam("KAFKA_SERVERS", "localhost:9092")
 	servers := strings.Split(kafkaURL, ",")
 	fmt.Println("kafka servers: ", servers)
 
 	// get kafka writer using environment variables.
-	//kafkaURL := os.Getenv("kafkaURL")
 	topic = GetEnvParam("KAFKA_TOPIC", "demoTopic")
-	kafkaWriter = getKafkaWriter(kafkaURL, topic)
+	if devMode {
+		kafkaWriter = getKafkaWriter(kafkaURL, topic)
+	} else {
+		kafkaWriter = getSslKafkaWriter(kafkaURL, topic)
+	}
 
 	fmt.Println("init kafka writer - ", kafkaWriter)
 

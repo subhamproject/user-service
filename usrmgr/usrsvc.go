@@ -7,11 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type User struct {
@@ -50,21 +53,21 @@ func GetAllUsers() ([]User, error) {
 	return users, nil
 }
 
-func CreateUser(usr User) (string, error) {
+func CreateUser(ctx context.Context, tracer trace.Tracer, usr User) (string, error) {
 
 	SendLogs(fmt.Sprintf("received request to create new user: %s", usr.Name))
 
 	id := genUserId()
 	usr.ID = id
 
-	result, err := userCollection.InsertOne(context.Background(), usr)
+	result, err := userCollection.InsertOne(ctx, usr)
 	if err != nil {
 		fmt.Printf("failed to insert user: %v\n", err)
 		return "", err
 	}
 	fmt.Println("user inserted with InsertedID: ", result.InsertedID)
 
-	CreateUserOrder(usr.ID)
+	CreateUserOrder(ctx, tracer, usr.ID)
 
 	return id, nil
 }
@@ -100,7 +103,18 @@ func GetUserOrder(id string) (User, error) {
 	return usr, nil
 }
 
-func CreateUserOrder(userId string) error {
+func CreateUserOrder(ctx context.Context, tracer trace.Tracer, userId string) error {
+
+	ctx, childSpan := tracer.Start(
+		ctx,
+		"CreateUserOrder",
+		trace.WithAttributes(attribute.String("CreateOrderForUser", userId)))
+
+	childSpan.AddEvent("CreateUserOrder-Event")
+	defer childSpan.End()
+
+	log.Printf("In CreateUserOrder span, when this function returns, CreateUserOrder will complete.")
+
 	fmt.Printf("invoke order-service to create order for user %v\n", userId)
 
 	host := GetEnvParam("ORDER_SVC_HOST", "localhost")
