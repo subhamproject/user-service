@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.opentelemetry.io/contrib/instrumentation/go.mongodb.org/mongo-driver/mongo/otelmongo"
 )
 
 var userCollection *mongo.Collection
@@ -49,13 +50,17 @@ func connectLocal(uri, user, pass string) (*mongo.Client, context.Context,
 	ctx, cancel := context.WithTimeout(context.Background(),
 		30*time.Second)
 
-	// "mongodb://user:password@localhost:27017".
 	credential := options.Credential{
 		Username: user,
 		Password: pass,
 	}
+	opts := options.Client().ApplyURI(uri).SetAuth(credential)
+
+	//Add instrumentation to client options
+	opts.Monitor = otelmongo.NewMonitor()
 	// mongo.Connect return mongo.Client method
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri).SetAuth(credential))
+	client, err := mongo.Connect(ctx, opts)
+
 	return client, ctx, cancel, err
 }
 
@@ -70,6 +75,8 @@ func connect(uri string) (*mongo.Client, context.Context,
 		AuthMechanism: "MONGODB-X509",
 	}
 	clientOpts := options.Client().ApplyURI(uri).SetAuth(credential)
+	// Add instrumentation to client options
+	clientOpts.Monitor = otelmongo.NewMonitor()
 
 	client, err := mongo.Connect(ctx, clientOpts)
 	if err != nil {
@@ -114,10 +121,6 @@ func InitMongoDB() (*mongo.Client, context.Context,
 	certificateKeyFilePath := GetEnvParam("MONGO_CLIENT_CERT_KEY", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongo-client.pem")
 
 	uri := GetEnvParam("MONGO_URL", "mongodb://%s:%s@mongo1:27011,mongo2:27012,mongo3:27013/demo?replicaSet=rs0&tlsCAFile=%s&tlsCertificateKeyFile=%s")
-
-	//DB_URL: "mongodb://test:rcxdev@rcx-mongo:27017,mongors1n1:27017,mongors2n1:27017/test?replicaSet=rs0"
-
-	//uri = fmt.Sprintf(uri, user, pass, caFilePath, certificateKeyFilePath)
 
 	var client *mongo.Client
 	var ctx context.Context

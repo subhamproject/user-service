@@ -2,22 +2,22 @@ package usrmgr
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func CreateUserHandler(c *gin.Context) {
-	tracer := otel.Tracer("CreateUserHandler")
-	ctx, span := tracer.Start(c, "CreateUserHandler")
-	span.AddEvent("CreateUserHandler-Event")
-	log.Printf("In CreateUserHandler span, before calling a service CreateUser function.")
+
+	tracer := otel.Tracer("CreateUserHandlerTrace")
+	_, span := tracer.Start(c.Request.Context(), "CreateUserHandler")
 
 	defer span.End()
 
-	log.Printf("In CreateUserHandler span, after calling a child function. When this function ends, parentSpan will complete.")
+	// log.Printf("In CreateUserHandler span, after calling a child function. When this function ends, parentSpan will complete.")
 
 	fmt.Println("received request to create new user")
 	var user User
@@ -28,7 +28,14 @@ func CreateUserHandler(c *gin.Context) {
 		return
 	}
 
-	usrId, err := CreateUser(ctx, tracer, user)
+	span.SetAttributes(attribute.String("UserName", user.Name))
+
+	// get the current span by the request context
+	currentSpan := trace.SpanFromContext(c.Request.Context())
+	currentSpan.AddEvent("CreateUserHandler-Event")
+	currentSpan.SetAttributes(attribute.String("UserName", user.Name))
+
+	usrId, err := CreateUser(c.Request.Context(), user)
 	if err != nil {
 		fmt.Printf("failed create user request, error - %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

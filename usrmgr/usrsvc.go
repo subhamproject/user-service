@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 	"net/http"
 	"os"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -54,13 +54,23 @@ func GetAllUsers() ([]User, error) {
 	return users, nil
 }
 
-func CreateUser(ctx context.Context, tracer trace.Tracer, usr User) (string, error) {
+func CreateUser(ctx context.Context, usr User) (string, error) {
 
-	tr := otel.Tracer("CreateUser")
-	_, span := tr.Start(ctx, "CreateUser-service")
-	span.SetAttributes(attribute.Key("CreateUser").String(usr.Name))
+	// tr := otel.Tracer("CreateUser")
+	// _, span := tr.Start(ctx, "CreateUser-service")
+	// span.SetAttributes(attribute.Key("CreateUser").String(usr.Name))
+	// defer span.End()
+	// SendLogs(fmt.Sprintf("received request to create new user: %s", usr.Name))
+
+	tracer := otel.Tracer("CreateUserServiceTrace")
+	_, span := tracer.Start(ctx, "CreateUserService")
+
 	defer span.End()
-	SendLogs(fmt.Sprintf("received request to create new user: %s", usr.Name))
+
+	// get the current span by the request context
+	currentSpan := trace.SpanFromContext(ctx)
+	currentSpan.AddEvent("CreateUserService-Event")
+	currentSpan.SetAttributes(attribute.String("UserName", usr.Name))
 
 	id := genUserId()
 	usr.ID = id
@@ -72,7 +82,7 @@ func CreateUser(ctx context.Context, tracer trace.Tracer, usr User) (string, err
 	}
 	fmt.Println("user inserted with InsertedID: ", result.InsertedID)
 
-	CreateUserOrder(ctx, tracer, usr.ID)
+	CreateUserOrder(ctx, usr.ID)
 
 	return id, nil
 }
@@ -108,14 +118,22 @@ func GetUserOrder(ctx context.Context, id string) (User, error) {
 	return usr, nil
 }
 
-func CreateUserOrder(ctx context.Context, tracer trace.Tracer, userId string) error {
+func CreateUserOrder(ctx context.Context, userId string) error {
 
-	tr := otel.Tracer("CreateUserOrder")
-	_, span := tr.Start(ctx, "CreateUserOrder-service")
-	span.SetAttributes(attribute.Key("CreateUserOrder-UserId").String(userId))
+	// tr := otel.Tracer("CreateUserOrder")
+	// _, span := tr.Start(ctx, "CreateUserOrder-service")
+	// span.SetAttributes(attribute.Key("CreateUserOrder-UserId").String(userId))
+	// defer span.End()
+
+	// get the current span by the request context
+	currentSpan := trace.SpanFromContext(ctx)
+	currentSpan.AddEvent("CreateUserOrder-Event")
+	currentSpan.SetAttributes(attribute.String("UserId", userId))
+
+	tracer := otel.Tracer("CreateUserOrderTrace")
+	_, span := tracer.Start(ctx, "CreateUserOrder")
+
 	defer span.End()
-
-	log.Printf("In CreateUserOrder span, when this function returns, CreateUserOrder will complete.")
 
 	fmt.Printf("invoke order-service to create order for user %v\n", userId)
 
@@ -128,9 +146,8 @@ func CreateUserOrder(ctx context.Context, tracer trace.Tracer, userId string) er
 		fmt.Println("failed to creare request for user orders ", err)
 		return err
 	}
-	httpClient := http.Client{}
+	httpClient := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	resp, err := httpClient.Do(req)
-	//resp, err := http.Post(orderSvcUrl, "application/json", bytes.NewBuffer(nil))
 	if err != nil {
 		fmt.Println("failed to creare user orders ", err)
 		return err

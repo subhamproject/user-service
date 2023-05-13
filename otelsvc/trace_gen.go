@@ -98,8 +98,13 @@ func InitTracerProvider(url string) func() {
 		)),
 	)
 
+	// Set the global trace provider
 	otel.SetTracerProvider(tracerProvider)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+
+	// Set the propagator
+	propagator := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+	otel.SetTextMapPropagator(propagator)
+
 	return func() {
 		// Shutdown will flush any remaining spans and shut down the exporter.
 		reportErr(tracerProvider.Shutdown(ctx), "failed to shutdown TracerProvider")
