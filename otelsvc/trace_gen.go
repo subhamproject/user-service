@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/subhamproject/user-service/consts"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -16,12 +17,6 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-)
-
-const (
-	service     = "user-service"
-	environment = "development"
-	id          = 1
 )
 
 // StdoutTraceExporter returns a console exporter.
@@ -50,20 +45,6 @@ func newExporter(ctx context.Context, conn *grpc.ClientConn) (*otlptrace.Exporte
 	return otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
 }
 
-// // newResource returns a resource describing this application.
-// func newResource() *resource.Resource {
-// 	r, _ := resource.Merge(
-// 		resource.Default(),
-// 		resource.NewWithAttributes(
-// 			semconv.SchemaURL,
-// 			semconv.ServiceName("fib"),
-// 			semconv.ServiceVersion("v0.1.0"),
-// 			attribute.String("environment", "demo"),
-// 		),
-// 	)
-// 	return r
-// }
-
 // InitTracerProvider returns an OpenTelemetry InitTracerProvider configured to use
 // the Jaeger exporter that will send spans to the provided url. The returned
 // InitTracerProvider will also use a Resource configured with all the information
@@ -78,8 +59,8 @@ func InitTracerProvider(url string) func() {
 	// 	return nil, err
 	// }
 
-	stdoutExp, err := StdoutTraceExporter()
-	reportErr(err, "failed to create stdout trace exporter")
+	// stdoutExp, err := StdoutTraceExporter()
+	// reportErr(err, "failed to create stdout trace exporter")
 
 	// Set up a trace exporter
 	traceExporter, err := OtelTraceExporter(ctx, url)
@@ -88,13 +69,12 @@ func InitTracerProvider(url string) func() {
 	tracerProvider := tracesdk.NewTracerProvider(
 		// Always be sure to batch in production.
 		tracesdk.WithBatcher(traceExporter),
-		tracesdk.WithBatcher(stdoutExp),
 		// Record information about this application in a Resource.
 		tracesdk.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(service),
-			attribute.String("environment", environment),
-			attribute.Int64("ID", id),
+			semconv.ServiceNameKey.String(consts.ServiceName),
+			attribute.String("environment", consts.Environment),
+			attribute.Int64("ID", consts.VersionId),
 		)),
 	)
 

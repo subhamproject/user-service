@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/subhamproject/user-service/logs"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -56,16 +57,12 @@ func GetAllUsers() ([]User, error) {
 
 func CreateUser(ctx context.Context, usr User) (string, error) {
 
-	// tr := otel.Tracer("CreateUser")
-	// _, span := tr.Start(ctx, "CreateUser-service")
-	// span.SetAttributes(attribute.Key("CreateUser").String(usr.Name))
-	// defer span.End()
-	// SendLogs(fmt.Sprintf("received request to create new user: %s", usr.Name))
-
 	tracer := otel.Tracer("CreateUserServiceTrace")
 	_, span := tracer.Start(ctx, "CreateUserService")
 
 	defer span.End()
+
+	logs.DebugTrace(ctx, span, fmt.Sprintf("CreateUserService %v", usr))
 
 	// get the current span by the request context
 	currentSpan := trace.SpanFromContext(ctx)
@@ -77,7 +74,7 @@ func CreateUser(ctx context.Context, usr User) (string, error) {
 
 	result, err := userCollection.InsertOne(ctx, usr)
 	if err != nil {
-		fmt.Printf("failed to insert user: %v\n", err)
+		logs.Error(err.Error())
 		return "", err
 	}
 	fmt.Println("user inserted with InsertedID: ", result.InsertedID)
