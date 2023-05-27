@@ -10,6 +10,7 @@ import (
 	"time"
 
 	kafka "github.com/segmentio/kafka-go"
+	"github.com/subhamproject/user-service/utils"
 )
 
 var (
@@ -33,8 +34,8 @@ func SendLogs(val string) {
 }
 
 func getSslKafkaWriter(kafkaURL, topic string) *kafka.Writer {
-	clientCertFile := GetEnvParam("KAFKA_CLIENT_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/kafka.user.cert")
-	clientKeyFile := GetEnvParam("KAFKA_CLIENT_KEY", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/kafka.user.key")
+	clientCertFile := utils.GetEnvParam("KAFKA_CLIENT_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/kafka.user.cert")
+	clientKeyFile := utils.GetEnvParam("KAFKA_CLIENT_KEY", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/kafka.user.key")
 	// caCertFile := GetEnvParam("KAFKA_CA_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/kafka.user.pem")
 	servers := strings.Split(kafkaURL, ",")
 	cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
@@ -84,14 +85,14 @@ func getKafkaWriter(kafkaURL, topic string) *kafka.Writer {
 }
 
 func InitKafka() {
-	devMode := GetEnvBoolParam("DEV_MODE", true)
+	devMode := utils.GetEnvBoolParam("DEV_MODE", true)
 	fmt.Println("initializing kafka connection. devmode: ", devMode)
-	kafkaURL := GetEnvParam("KAFKA_SERVERS", "localhost:9092")
+	kafkaURL := utils.GetEnvParam("KAFKA_SERVERS", "localhost:9092")
 	servers := strings.Split(kafkaURL, ",")
 	fmt.Println("kafka servers: ", servers)
 
 	// get kafka writer using environment variables.
-	topic = GetEnvParam("KAFKA_TOPIC", "demoTopic")
+	topic = utils.GetEnvParam("KAFKA_TOPIC", "demoTopic")
 	if devMode {
 		kafkaWriter = getKafkaWriter(kafkaURL, topic)
 	} else {

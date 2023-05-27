@@ -49,7 +49,7 @@ func newExporter(ctx context.Context, conn *grpc.ClientConn) (*otlptrace.Exporte
 // the Jaeger exporter that will send spans to the provided url. The returned
 // InitTracerProvider will also use a Resource configured with all the information
 // about the application.
-func InitTracerProvider(url string) func() {
+func InitTracerProvider(url string, otelEnable bool) func() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 
@@ -59,24 +59,35 @@ func InitTracerProvider(url string) func() {
 	// 	return nil, err
 	// }
 
-	// stdoutExp, err := StdoutTraceExporter()
-	// reportErr(err, "failed to create stdout trace exporter")
+	stdoutExp, err := StdoutTraceExporter()
+	reportErr(err, "failed to create stdout trace exporter")
 
-	// Set up a trace exporter
-	traceExporter, err := OtelTraceExporter(ctx, url)
-	reportErr(err, "failed to create otel trace exporter")
+	var tracerProvider *tracesdk.TracerProvider
 
-	tracerProvider := tracesdk.NewTracerProvider(
-		// Always be sure to batch in production.
-		tracesdk.WithBatcher(traceExporter),
-		// Record information about this application in a Resource.
-		tracesdk.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(consts.ServiceName),
-			attribute.String("environment", consts.Environment),
-			attribute.Int64("ID", consts.VersionId),
-		)),
+	resources := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String(consts.ServiceName),
+		attribute.String("environment", consts.Environment),
+		attribute.Int64("ID", consts.VersionId),
 	)
+
+	// Set up a Otel trace exporter if enabled
+	if otelEnable {
+		otelTraceExporter, err := OtelTraceExporter(ctx, url)
+		reportErr(err, "failed to create otel trace exporter")
+		tracerProvider = tracesdk.NewTracerProvider(
+			tracesdk.WithBatcher(stdoutExp),
+			tracesdk.WithBatcher(otelTraceExporter),
+			tracesdk.WithResource(resources),
+		)
+	} else {
+		tracerProvider = tracesdk.NewTracerProvider(
+			// Always be sure to batch in production.
+			tracesdk.WithBatcher(stdoutExp),
+			// Record information about this application in a Resource.
+			tracesdk.WithResource(resources),
+		)
+	}
 
 	// Set the global trace provider
 	otel.SetTracerProvider(tracerProvider)
@@ -90,7 +101,6 @@ func InitTracerProvider(url string) func() {
 		reportErr(tracerProvider.Shutdown(ctx), "failed to shutdown TracerProvider")
 		cancel()
 	}
-	//return tp, nil
 }
 
 func reportErr(err error, message string) {
