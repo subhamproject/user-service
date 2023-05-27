@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/subhamproject/user-service/otelsvc"
 	"github.com/subhamproject/user-service/usrmgr"
+	"github.com/subhamproject/user-service/utils"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
@@ -44,8 +45,9 @@ func main() {
 	wg.Wait()
 
 	log.Printf("initializing otel connection...")
-	otelUrl := usrmgr.GetEnvParam("OTEL_COLLECTOR_URL", "localhost:4317")
-	otelShutdown = otelsvc.InitTracerProvider(otelUrl)
+	otelUrl := utils.GetEnvParam("OTEL_COLLECTOR_URL", "localhost:4317")
+	otelEnable := utils.GetEnvBoolParam("OTEL_ENABLE", false)
+	otelShutdown = otelsvc.InitTracerProvider(otelUrl, otelEnable)
 
 	r := gin.Default()
 
@@ -58,7 +60,7 @@ func main() {
 	r.GET("/user", usrmgr.GetUserHandler)
 	r.GET("/user/order", usrmgr.GetUserOrderHandler)
 
-	serverPort := usrmgr.GetEnvParam("SERVICE_PORT", "8082")
+	serverPort := utils.GetEnvParam("SERVICE_PORT", "8082")
 
 	server = &http.Server{
 		Addr:    ":" + serverPort,

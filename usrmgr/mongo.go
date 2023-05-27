@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"strconv"
 	"time"
 
+	"github.com/subhamproject/user-service/utils"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -114,13 +113,12 @@ func ping(client *mongo.Client, ctx context.Context) error {
 func InitMongoDB() (*mongo.Client, context.Context,
 	context.CancelFunc, error) {
 
-	devMode := GetEnvBoolParam("DEV_MODE", true)
-	user := GetEnvParam("MONGO_USERNAME", "root")
-	pass := GetEnvParam("MONGO_PASSWORD", "rootpassword")
-	caFilePath := GetEnvParam("MONGO_CA_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongoCA.crt")
-	certificateKeyFilePath := GetEnvParam("MONGO_CLIENT_CERT_KEY", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongo-client.pem")
-
-	uri := GetEnvParam("MONGO_URL", "mongodb://%s:%s@mongo1:27011,mongo2:27012,mongo3:27013/demo?replicaSet=rs0&tlsCAFile=%s&tlsCertificateKeyFile=%s")
+	devMode := utils.GetEnvBoolParam("DEV_MODE", true)
+	user := utils.GetEnvParam("MONGO_USERNAME", "root")
+	pass := utils.GetEnvParam("MONGO_PASSWORD", "rootpassword")
+	caFilePath := utils.GetEnvParam("MONGO_CA_CERT", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongoCA.crt")
+	certificateKeyFilePath := utils.GetEnvParam("MONGO_CLIENT_CERT_KEY", "/home/om/go/src/github.com/subhamproject/devops-demo/certs/mongo-client.pem")
+	uri := utils.GetEnvParam("MONGO_URL", "mongodb://%s:%s@mongo1:27011,mongo2:27012,mongo3:27013/demo?replicaSet=rs0&tlsCAFile=%s&tlsCertificateKeyFile=%s")
 
 	var client *mongo.Client
 	var ctx context.Context
@@ -155,16 +153,4 @@ func CloseMongoDB(client *mongo.Client, ctx context.Context, cancel context.Canc
 	close(client, ctx, cancel)
 
 	fmt.Println("mongodb connected closed")
-}
-
-// GetEnvBoolParam : return bool environmental param if exists, otherwise return default
-func GetEnvBoolParam(param string, dflt bool) bool {
-	if v, exists := os.LookupEnv(param); exists {
-		b, err := strconv.ParseBool(v)
-		if err != nil {
-			return dflt
-		}
-		return b
-	}
-	return dflt
 }

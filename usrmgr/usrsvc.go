@@ -9,9 +9,9 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"os"
 
 	"github.com/subhamproject/user-service/logs"
+	"github.com/subhamproject/user-service/utils"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -27,6 +27,9 @@ type User struct {
 
 func GetUserByID(ctx context.Context, id string) (User, error) {
 
+	tracer := otel.Tracer("GetUserByIDServiceTrace")
+	_, span := tracer.Start(ctx, "GetUserByIDService")
+	defer span.End()
 	SendLogs(fmt.Sprintf("received request to get user by Id %s", id))
 
 	var user User
@@ -39,11 +42,15 @@ func GetUserByID(ctx context.Context, id string) (User, error) {
 	return user, nil
 }
 
-func GetAllUsers() ([]User, error) {
+func GetAllUsers(ctx context.Context) ([]User, error) {
+
+	tracer := otel.Tracer("GetAllUsersServiceTrace")
+	_, span := tracer.Start(ctx, "GetAllUsersService")
+	defer span.End()
 
 	SendLogs("received request to get all users")
 	var users []User
-	cursor, err := userCollection.Find(context.Background(), bson.D{{}})
+	cursor, err := userCollection.Find(ctx, bson.D{{}})
 	if err != nil {
 		return users, err
 	}
@@ -85,11 +92,21 @@ func CreateUser(ctx context.Context, usr User) (string, error) {
 }
 
 func GetUserOrder(ctx context.Context, id string) (User, error) {
-	host := GetEnvParam("ORDER_SVC_HOST", "localhost")
-	port := GetEnvParam("ORDER_SVC_PORT", "8081")
+	host := utils.GetEnvParam("ORDER_SVC_HOST", "localhost")
+	port := utils.GetEnvParam("ORDER_SVC_PORT", "8081")
+
+	tracer := otel.Tracer("GetUserOrderTrace")
+	_, span := tracer.Start(ctx, "GetUserOrder")
+	defer span.End()
 
 	orderSvcUrl := fmt.Sprintf("http://%s:%s/order?userId=%s", host, port, id)
-	resp, err := http.Get(orderSvcUrl)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, orderSvcUrl, bytes.NewBuffer(nil))
+	if err != nil {
+		fmt.Println("failed to creare request for user orders ", err)
+		return User{}, err
+	}
+	httpClient := http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		fmt.Println("error while loading user orders ", err)
 		return User{}, err
@@ -117,11 +134,6 @@ func GetUserOrder(ctx context.Context, id string) (User, error) {
 
 func CreateUserOrder(ctx context.Context, userId string) error {
 
-	// tr := otel.Tracer("CreateUserOrder")
-	// _, span := tr.Start(ctx, "CreateUserOrder-service")
-	// span.SetAttributes(attribute.Key("CreateUserOrder-UserId").String(userId))
-	// defer span.End()
-
 	// get the current span by the request context
 	currentSpan := trace.SpanFromContext(ctx)
 	currentSpan.AddEvent("CreateUserOrder-Event")
@@ -134,8 +146,8 @@ func CreateUserOrder(ctx context.Context, userId string) error {
 
 	fmt.Printf("invoke order-service to create order for user %v\n", userId)
 
-	host := GetEnvParam("ORDER_SVC_HOST", "localhost")
-	port := GetEnvParam("ORDER_SVC_PORT", "8081")
+	host := utils.GetEnvParam("ORDER_SVC_HOST", "localhost")
+	port := utils.GetEnvParam("ORDER_SVC_PORT", "8081")
 
 	orderSvcUrl := fmt.Sprintf("http://%s:%s/order?userId=%s", host, port, userId)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, orderSvcUrl, bytes.NewBuffer(nil))
@@ -154,14 +166,6 @@ func CreateUserOrder(ctx context.Context, userId string) error {
 		return err
 	}
 	return nil
-}
-
-// GetEnvParam : return string environmental param if exists, otherwise return default
-func GetEnvParam(param string, dflt string) string {
-	if v, exists := os.LookupEnv(param); exists {
-		return v
-	}
-	return dflt
 }
 
 func genUserId() string {
