@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/subhamproject/user-service/logs"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -17,13 +18,11 @@ func CreateUserHandler(c *gin.Context) {
 
 	defer span.End()
 
-	// log.Printf("In CreateUserHandler span, after calling a child function. When this function ends, parentSpan will complete.")
-
-	fmt.Println("received request to create new user")
+	logs.DebugTrace(c.Request.Context(), span, "received request to create new user")
 	var user User
 	err := c.BindJSON(&user)
 	if err != nil {
-		fmt.Printf("unable parse create user request, error - %v\n", err)
+		logs.ErrorTrace(c.Request.Context(), span, fmt.Sprintf("unable parse create user request, error - %v", err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -37,7 +36,7 @@ func CreateUserHandler(c *gin.Context) {
 
 	usrId, err := CreateUser(c.Request.Context(), user)
 	if err != nil {
-		fmt.Printf("failed create user request, error - %v\n", err)
+		logs.ErrorTrace(c.Request.Context(), span, fmt.Sprintf("failed create user request, error - %v", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -45,7 +44,12 @@ func CreateUserHandler(c *gin.Context) {
 }
 
 func GetAllUsersHandler(c *gin.Context) {
-	fmt.Println("received request to get all users")
+	tracer := otel.Tracer("GetAllUsersHandlerTrace")
+	_, span := tracer.Start(c.Request.Context(), "GetAllUsersHandler")
+
+	defer span.End()
+
+	logs.DebugTrace(c.Request.Context(), span, "received request to get all users")
 	users, err := GetAllUsers()
 	if err != nil {
 		fmt.Printf("failed to get users from db, error - %v\n", err)
