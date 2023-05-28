@@ -38,7 +38,7 @@ func GetUserByID(ctx context.Context, id string) (User, error) {
 	if err != nil {
 		return user, err
 	}
-
+	SendLogs(fmt.Sprintf("successfully get user %s details from database", id))
 	return user, nil
 }
 
@@ -59,14 +59,16 @@ func GetAllUsers(ctx context.Context) ([]User, error) {
 		return users, err
 	}
 
+	SendLogs(fmt.Sprintf("successfully get all the users from the database, total is %d", len(users)))
 	return users, nil
 }
 
 func CreateUser(ctx context.Context, usr User) (string, error) {
 
+	SendLogs("received request to create new user")
+
 	tracer := otel.Tracer("CreateUserServiceTrace")
 	_, span := tracer.Start(ctx, "CreateUserService")
-
 	defer span.End()
 
 	logs.DebugTrace(ctx, span, fmt.Sprintf("CreateUserService %v", usr))
@@ -88,6 +90,7 @@ func CreateUser(ctx context.Context, usr User) (string, error) {
 
 	CreateUserOrder(ctx, usr.ID)
 
+	SendLogs(fmt.Sprintf("users %s successfully created", id))
 	return id, nil
 }
 
