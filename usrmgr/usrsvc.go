@@ -65,7 +65,7 @@ func GetAllUsers(ctx context.Context) ([]User, error) {
 
 func CreateUser(ctx context.Context, usr User) (string, error) {
 
-	SendLogs("received request to create new user")
+	SendLogs(fmt.Sprintf("received request to create new user %s", usr.Name))
 
 	tracer := otel.Tracer("CreateUserServiceTrace")
 	_, span := tracer.Start(ctx, "CreateUserService")
@@ -90,7 +90,7 @@ func CreateUser(ctx context.Context, usr User) (string, error) {
 
 	CreateUserOrder(ctx, usr.ID)
 
-	SendLogs(fmt.Sprintf("users %s successfully created", id))
+	SendLogs(fmt.Sprintf("user %s successfully created and user id is %s", usr.Name, id))
 	return id, nil
 }
 
